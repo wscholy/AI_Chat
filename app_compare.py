@@ -11,6 +11,7 @@ api_key = st.text_input("Anthropic API 키", type="password", placeholder="sk-an
 
 if api_key:
     col1, col2 = st.columns(2)
+
     with col1:
         st.subheader("🚀 Claude Haiku")
         st.caption("빠르고 저렴 — 간단한 작업에 적합")
@@ -20,74 +21,113 @@ if api_key:
 
     system_prompt = st.text_input(
         "역할 설정",
-        value="당신은 대학교 AI 융합 전공 대학원생입니다. 수준에 맞게 한국어로 답변하세요."
+        value="당신은 대학교 AI 융합 전공 수업의 조교입니다. 학생 수준에 맞게 한국어로 답변하세요."
     )
     question = st.text_area(
         "비교할 질문을 입력하세요",
-        placeholder="예: 바이브코딩이 가능한 도구를 비교해줘. 머신러닝과 딥러닝의 차이를 설명해줘",
+        placeholder="예: 머신러닝과 딥러닝의 차이를 설명해줘",
         height=80
     )
 
-    if st.button("🔍 두 모델 동시 실행", type="primary", disabled=not question):
-        client = anthropic.Anthropic(api_key=api_key)
+    # ── 버튼 3개: 각각 + 동시
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
+    with btn_col1:
+        run_haiku  = st.button("🚀 Haiku만 실행",      disabled=not question, use_container_width=True)
+    with btn_col2:
+        run_sonnet = st.button("🧠 Sonnet만 실행",     disabled=not question, use_container_width=True)
+    with btn_col3:
+        run_both   = st.button("⚖️ 두 모델 동시 실행", disabled=not question, use_container_width=True, type="primary")
 
-        # 결과를 담을 딕셔너리 (스레드 간 공유)
+    def call_api(model_name, client, system_prompt, question):
+        t0 = time.time()
+        try:
+            response = client.messages.create(
+                model=model_name,
+                max_tokens=2048,
+                system=system_prompt,
+                messages=[{"role": "user", "content": question}]
+            )
+            return {
+                "text": response.content[0].text,
+                "elapsed": time.time() - t0,
+                "input_tokens": response.usage.input_tokens,
+                "output_tokens": response.usage.output_tokens,
+                "error": None,
+            }
+        except Exception as e:
+            return {"text": None, "elapsed": time.time() - t0,
+                    "input_tokens": 0, "output_tokens": 0, "error": str(e)}
+
+    def show_result(container, label, result):
+        with container:
+            if result["error"]:
+                st.error(f"오류: {result['error']}")
+            else:
+                st.success(result["text"])
+                # ── 응답 시간을 크게 강조해서 표시
+                st.metric(f"⏱ {label} 응답 시간", f"{result['elapsed']:.2f} 초")
+                st.caption(f"토큰: 입력 {result['input_tokens']} / 출력 {result['output_tokens']}")
+
+    client = anthropic.Anthropic(api_key=api_key)
+    col1, col2 = st.columns(2)
+
+    # ── Haiku만
+    if run_haiku:
+        with col1:
+            with st.spinner("Haiku 실행 중..."):
+                r = call_api("claude-haiku-4-5-20251001", client, system_prompt, question)
+        show_result(col1, "Haiku", r)
+
+    # ── Sonnet만
+    if run_sonnet:
+        with col2:
+            with st.spinner("Sonnet 실행 중..."):
+                r = call_api("claude-sonnet-4-6", client, system_prompt, question)
+        show_result(col2, "Sonnet", r)
+
+    # ── 동시 실행 (병렬)
+    if run_both:
         results = {}
 
-        def call_model(model_key, model_name):
-            t0 = time.time()
-            try:
-                response = client.messages.create(
-                    model=model_name,
-                    max_tokens=2048,   # ← 512 → 2048으로 수정 (Sonnet 응답 잘림 방지)
-                    system=system_prompt,
-                    messages=[{"role": "user", "content": question}]
-                )
-                results[model_key] = {
-                    "text": response.content[0].text,
-                    "elapsed": time.time() - t0,
-                    "input_tokens": response.usage.input_tokens,
-                    "output_tokens": response.usage.output_tokens,
-                    "error": None,
-                }
-            except Exception as e:
-                results[model_key] = {
-                    "text": None,
-                    "elapsed": time.time() - t0,
-                    "input_tokens": 0,
-                    "output_tokens": 0,
-                    "error": str(e),
-                }
+        def threaded_call(key, model_name):
+            results[key] = call_api(model_name, client, system_prompt, question)
 
-        # 두 모델을 병렬 실행 → 실제 응답 시간을 정확히 비교할 수 있음
         with st.spinner("두 모델 동시 실행 중..."):
-            t_haiku  = threading.Thread(target=call_model, args=("haiku",  "claude-haiku-4-5-20251001"))
-            t_sonnet = threading.Thread(target=call_model, args=("sonnet", "claude-sonnet-4-6"))
+            # 실시간 경과 시간 표시
+            timer_col1, timer_col2 = st.columns(2)
+            ph1 = timer_col1.empty()
+            ph2 = timer_col2.empty()
+
+            t_haiku  = threading.Thread(target=threaded_call, args=("haiku",  "claude-haiku-4-5-20251001"))
+            t_sonnet = threading.Thread(target=threaded_call, args=("sonnet", "claude-sonnet-4-6"))
             t_haiku.start()
             t_sonnet.start()
+
+            t_start = time.time()
+            while t_haiku.is_alive() or t_sonnet.is_alive():
+                elapsed = time.time() - t_start
+                haiku_done  = not t_haiku.is_alive()
+                sonnet_done = not t_sonnet.is_alive()
+
+                ph1.metric(
+                    "⏱ Haiku",
+                    f"{'✅ ' + f\"{results['haiku']['elapsed']:.2f}초\" if haiku_done else f'{elapsed:.1f}초 (실행 중...)'}",
+                )
+                ph2.metric(
+                    "⏱ Sonnet",
+                    f"{'✅ ' + f\"{results['sonnet']['elapsed']:.2f}초\" if sonnet_done else f'{elapsed:.1f}초 (실행 중...)'}",
+                )
+                time.sleep(0.1)
+
             t_haiku.join()
             t_sonnet.join()
 
-        # 결과 표시
-        col1, col2 = st.columns(2)
+            # 완료 후 최종 시간 고정
+            ph1.metric("⏱ Haiku 응답 시간",  f"{results['haiku']['elapsed']:.2f} 초")
+            ph2.metric("⏱ Sonnet 응답 시간", f"{results['sonnet']['elapsed']:.2f} 초")
 
-        with col1:
-            r = results["haiku"]
-            if r["error"]:
-                st.error(f"오류: {r['error']}")
-            else:
-                st.success(r["text"])
-                st.metric("응답 시간", f"{r['elapsed']:.1f}초")
-                st.caption(f"토큰: 입력 {r['input_tokens']} / 출력 {r['output_tokens']}")
-
-        with col2:
-            r = results["sonnet"]
-            if r["error"]:
-                st.error(f"오류: {r['error']}")
-            else:
-                st.success(r["text"])
-                st.metric("응답 시간", f"{r['elapsed']:.1f}초")
-                st.caption(f"토큰: 입력 {r['input_tokens']} / 출력 {r['output_tokens']}")
+        show_result(col1, "Haiku",  results["haiku"])
+        show_result(col2, "Sonnet", results["sonnet"])
 
         st.divider()
         st.subheader("📊 토론: 어떤 모델이 더 나았나요?")
