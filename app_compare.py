@@ -11,7 +11,6 @@ api_key = st.text_input("Anthropic API 키", type="password", placeholder="sk-an
 
 if api_key:
     col1, col2 = st.columns(2)
-
     with col1:
         st.subheader("🚀 Claude Haiku")
         st.caption("빠르고 저렴 — 간단한 작업에 적합")
@@ -29,14 +28,13 @@ if api_key:
         height=80
     )
 
-    # ── 버튼 3개: 각각 + 동시
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     with btn_col1:
-        run_haiku  = st.button("🚀 Haiku만 실행",      disabled=not question, use_container_width=True)
+        run_haiku  = st.button("🚀 Haiku만 실행",       disabled=not question, use_container_width=True)
     with btn_col2:
-        run_sonnet = st.button("🧠 Sonnet만 실행",     disabled=not question, use_container_width=True)
+        run_sonnet = st.button("🧠 Sonnet만 실행",      disabled=not question, use_container_width=True)
     with btn_col3:
-        run_both   = st.button("⚖️ 두 모델 동시 실행", disabled=not question, use_container_width=True, type="primary")
+        run_both   = st.button("⚖️ 두 모델 동시 실행",  disabled=not question, use_container_width=True, type="primary")
 
     def call_api(model_name, client, system_prompt, question):
         t0 = time.time()
@@ -55,30 +53,38 @@ if api_key:
                 "error": None,
             }
         except Exception as e:
-            return {"text": None, "elapsed": time.time() - t0,
-                    "input_tokens": 0, "output_tokens": 0, "error": str(e)}
+            return {
+                "text": None,
+                "elapsed": time.time() - t0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "error": str(e),
+            }
 
     def show_result(container, label, result):
         with container:
             if result["error"]:
-                st.error(f"오류: {result['error']}")
+                st.error("오류: " + result["error"])
             else:
                 st.success(result["text"])
-                # ── 응답 시간을 크게 강조해서 표시
-                st.metric(f"⏱ {label} 응답 시간", f"{result['elapsed']:.2f} 초")
-                st.caption(f"토큰: 입력 {result['input_tokens']} / 출력 {result['output_tokens']}")
+                elapsed_str = "{:.2f} 초".format(result["elapsed"])
+                st.metric("⏱ " + label + " 응답 시간", elapsed_str)
+                token_str = "토큰: 입력 {} / 출력 {}".format(
+                    result["input_tokens"], result["output_tokens"]
+                )
+                st.caption(token_str)
 
     client = anthropic.Anthropic(api_key=api_key)
     col1, col2 = st.columns(2)
 
-    # ── Haiku만
+    # ── Haiku만 실행
     if run_haiku:
         with col1:
             with st.spinner("Haiku 실행 중..."):
                 r = call_api("claude-haiku-4-5-20251001", client, system_prompt, question)
         show_result(col1, "Haiku", r)
 
-    # ── Sonnet만
+    # ── Sonnet만 실행
     if run_sonnet:
         with col2:
             with st.spinner("Sonnet 실행 중..."):
@@ -92,39 +98,41 @@ if api_key:
         def threaded_call(key, model_name):
             results[key] = call_api(model_name, client, system_prompt, question)
 
-        with st.spinner("두 모델 동시 실행 중..."):
-            # 실시간 경과 시간 표시
-            timer_col1, timer_col2 = st.columns(2)
-            ph1 = timer_col1.empty()
-            ph2 = timer_col2.empty()
+        t_haiku  = threading.Thread(target=threaded_call, args=("haiku",  "claude-haiku-4-5-20251001"))
+        t_sonnet = threading.Thread(target=threaded_call, args=("sonnet", "claude-sonnet-4-6"))
+        t_haiku.start()
+        t_sonnet.start()
 
-            t_haiku  = threading.Thread(target=threaded_call, args=("haiku",  "claude-haiku-4-5-20251001"))
-            t_sonnet = threading.Thread(target=threaded_call, args=("sonnet", "claude-sonnet-4-6"))
-            t_haiku.start()
-            t_sonnet.start()
+        # 실시간 경과 시간 표시
+        timer_col1, timer_col2 = st.columns(2)
+        ph1 = timer_col1.empty()
+        ph2 = timer_col2.empty()
 
-            t_start = time.time()
-            while t_haiku.is_alive() or t_sonnet.is_alive():
-                elapsed = time.time() - t_start
-                haiku_done  = not t_haiku.is_alive()
-                sonnet_done = not t_sonnet.is_alive()
+        t_start = time.time()
+        while t_haiku.is_alive() or t_sonnet.is_alive():
+            elapsed = time.time() - t_start
+            elapsed_str = "{:.1f}초 (실행 중...)".format(elapsed)
 
-                ph1.metric(
-                    "⏱ Haiku",
-                    f"{'✅ ' + f\"{results['haiku']['elapsed']:.2f}초\" if haiku_done else f'{elapsed:.1f}초 (실행 중...)'}",
-                )
-                ph2.metric(
-                    "⏱ Sonnet",
-                    f"{'✅ ' + f\"{results['sonnet']['elapsed']:.2f}초\" if sonnet_done else f'{elapsed:.1f}초 (실행 중...)'}",
-                )
-                time.sleep(0.1)
+            if not t_haiku.is_alive() and "haiku" in results:
+                haiku_val = "✅ {:.2f}초".format(results["haiku"]["elapsed"])
+            else:
+                haiku_val = elapsed_str
 
-            t_haiku.join()
-            t_sonnet.join()
+            if not t_sonnet.is_alive() and "sonnet" in results:
+                sonnet_val = "✅ {:.2f}초".format(results["sonnet"]["elapsed"])
+            else:
+                sonnet_val = elapsed_str
 
-            # 완료 후 최종 시간 고정
-            ph1.metric("⏱ Haiku 응답 시간",  f"{results['haiku']['elapsed']:.2f} 초")
-            ph2.metric("⏱ Sonnet 응답 시간", f"{results['sonnet']['elapsed']:.2f} 초")
+            ph1.metric("⏱ Haiku",  haiku_val)
+            ph2.metric("⏱ Sonnet", sonnet_val)
+            time.sleep(0.1)
+
+        t_haiku.join()
+        t_sonnet.join()
+
+        # 완료 후 최종 시간 고정
+        ph1.metric("⏱ Haiku 응답 시간",  "{:.2f} 초".format(results["haiku"]["elapsed"]))
+        ph2.metric("⏱ Sonnet 응답 시간", "{:.2f} 초".format(results["sonnet"]["elapsed"]))
 
         show_result(col1, "Haiku",  results["haiku"])
         show_result(col2, "Sonnet", results["sonnet"])
