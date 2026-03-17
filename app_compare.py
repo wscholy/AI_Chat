@@ -20,11 +20,11 @@ if api_key:
 
     system_prompt = st.text_input(
         "역할 설정",
-        value="당신은 대학교 AI 융합 전공 수업의 조교입니다. 학생 수준에 맞게 한국어로 답변하세요."
+        value="당신은 대학교 AI 융합 전공 대학원생입니다. 수준에 맞게 한국어로 답변하세요."
     )
     question = st.text_area(
         "비교할 질문을 입력하세요",
-        placeholder="예: 머신러닝과 딥러닝의 차이를 설명해줘",
+        placeholder="예: 바이브코딩이 가능한 도구를 비교해줘. 머신러닝과 딥러닝의 차이를 설명해줘",
         height=80
     )
 
