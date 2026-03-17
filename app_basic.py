@@ -232,10 +232,35 @@ with code_col:
 
         current_code = st.session_state.generated_codes[st.session_state.current_code_idx]
 
-        # 복사 버튼 + 다운로드 버튼
+        # ── requirements.txt + 배포 안내 (코드 위에 배치)
+        req_col, deploy_col = st.columns(2)
+        with req_col:
+            with st.expander("📦 requirements.txt"):
+                req_content = "anthropic\nstreamlit\n"
+                st.code(req_content, language="text")
+                st.download_button(
+                    label="⬇️ requirements.txt 다운로드",
+                    data=req_content,
+                    file_name="requirements.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                )
+                st.caption("GitHub 저장소 루트에 이 파일을 포함해야 Streamlit Cloud에서 자동 설치됩니다.")
+        with deploy_col:
+            with st.expander("🚀 배포 방법 (GitHub → Streamlit Cloud)"):
+                st.markdown("""
+1. `chatbot_app.py`, `requirements.txt` GitHub 업로드
+2. [share.streamlit.io](https://share.streamlit.io) → GitHub 로그인
+3. **New app** → 저장소 선택 → Main file: `chatbot_app.py`
+4. **Deploy** 클릭 → 자동 빌드 (1~2분)
+5. 생성된 URL 공유!
+
+> ⚠️ API 키는 코드에 넣지 말고 앱 화면에서 직접 입력하세요.
+""")
+
+        # ── 복사 버튼 + 다운로드 버튼
         copy_col, dl_col = st.columns(2)
         with copy_col:
-            # 클립보드 복사 (JavaScript)
             escaped = current_code.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
             copy_js = f"""
             <button onclick="
@@ -260,22 +285,5 @@ with code_col:
                 use_container_width=True,
             )
 
-        # 코드 표시
+        # ── 코드 표시
         st.code(current_code, language="python", line_numbers=True)
-
-        # requirements.txt 힌트
-        with st.expander("📦 requirements.txt"):
-            st.code("anthropic\nstreamlit", language="text")
-            st.caption("GitHub 저장소 루트에 이 파일을 포함해야 Streamlit Cloud에서 자동 설치됩니다.")
-
-        # GitHub 배포 안내
-        with st.expander("🚀 배포 방법 (GitHub → Streamlit Cloud)"):
-            st.markdown("""
-1. GitHub 저장소에 `chatbot_app.py`, `requirements.txt` 업로드
-2. [share.streamlit.io](https://share.streamlit.io) 접속 → GitHub 로그인
-3. **New app** → 저장소 선택 → Main file: `chatbot_app.py`
-4. **Deploy** 클릭 → 자동 빌드 (1~2분)
-5. 생성된 URL 공유!
-
-> ⚠️ API 키는 절대 코드에 넣지 마세요. 앱 화면에서 직접 입력하거나 Streamlit Secrets 사용.
-""")
