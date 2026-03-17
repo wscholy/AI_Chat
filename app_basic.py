@@ -37,12 +37,12 @@ with st.sidebar:
 
     role = st.text_area(
         "① 역할 부여 (시스템 프롬프트)",
-        placeholder="예: 당신은 친절한 여행 도우미입니다. 한국어로 답변하세요.",
+        placeholder="예: 당신은 중학교 3학년 생물 교사입니다. 한국어로 답변하세요.",
         height=90,
     )
     main_request = st.text_area(
         "② 주요 요청 사항",
-        placeholder="예: 여행지 추천, 일정 작성, 숙소·항공 정보 안내 기능",
+        placeholder="예: 학습가이드 챗봇, 단원별 퀴즈 챗봇 etc.",
         height=90,
     )
     dev_env = st.selectbox(
