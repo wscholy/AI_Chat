@@ -10,36 +10,99 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS
+# 커스텀 CSS - 다크 테마
 st.markdown("""
 <style>
+    body {
+        background-color: #1a1a1a;
+        color: #ffffff;
+    }
+    
     .teacher-message {
-        background-color: #e3f2fd;
+        background-color: #2d3f5f;
         padding: 15px;
         border-radius: 10px;
-        border-left: 5px solid #1976d2;
+        border-left: 5px solid #4a90e2;
         margin: 10px 0;
+        color: #e8f0fe;
     }
+    
     .student-message {
-        background-color: #f5f5f5;
+        background-color: #3d3d3d;
         padding: 15px;
         border-radius: 10px;
-        border-left: 5px solid #666;
+        border-left: 5px solid #888;
         margin: 10px 0;
+        color: #f0f0f0;
     }
+    
     .header-title {
-        color: #1976d2;
+        color: #4a90e2;
         text-align: center;
         font-size: 2.5em;
         font-weight: bold;
         margin-bottom: 10px;
     }
+    
     .info-box {
-        background-color: #fff3e0;
+        background-color: #4d3d1f;
         padding: 15px;
         border-radius: 8px;
         border-left: 4px solid #ff9800;
         margin: 10px 0;
+        color: #ffc966;
+    }
+    
+    /* Streamlit 기본 요소 색상 조정 */
+    .stTextInput > div > div > input {
+        background-color: #2d2d2d;
+        color: #ffffff;
+        border: 1px solid #4a4a4a;
+    }
+    
+    .stSelectbox > div > div > select {
+        background-color: #2d2d2d;
+        color: #ffffff;
+    }
+    
+    .stButton > button {
+        background-color: #4a90e2;
+        color: #ffffff;
+        border: none;
+    }
+    
+    .stButton > button:hover {
+        background-color: #3a7fd8;
+    }
+    
+    .stExpander {
+        background-color: #2d2d2d;
+        border: 1px solid #4a4a4a;
+    }
+    
+    .stExpander > div > div > p {
+        color: #e8e8e8;
+    }
+    
+    /* 사이드바 스타일 */
+    [data-testid="stSidebar"] {
+        background-color: #1f1f1f;
+    }
+    
+    .stMarkdown, .stText {
+        color: #ffffff;
+    }
+    
+    hr {
+        border-color: #4a4a4a;
+    }
+    
+    .stCaption {
+        color: #888888;
+    }
+    
+    .stTabs [data-baseweb="tab-list"] button {
+        color: #ffffff;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -136,12 +199,12 @@ with chat_container:
     for message in st.session_state.messages:
         if message["role"] == "user":
             st.markdown(
-                f'<div class="student-message"><strong>학생:</strong> {message["content"]}</div>',
+                f'<div class="student-message"><strong>👤 학생:</strong><br>{message["content"]}</div>',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                f'<div class="teacher-message"><strong>생물 선생님:</strong><br>{message["content"]}</div>',
+                f'<div class="teacher-message"><strong>👨‍🏫 생물 선생님:</strong><br>{message["content"]}</div>',
                 unsafe_allow_html=True
             )
 
