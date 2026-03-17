@@ -261,20 +261,17 @@ with code_col:
         # ── 복사 버튼 + 다운로드 버튼
         copy_col, dl_col = st.columns(2)
         with copy_col:
-            escaped = current_code.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
-            copy_js = f"""
-            <button onclick="
-                navigator.clipboard.writeText(`{escaped}`).then(() => {{
-                    this.innerText = '✅ 복사됨!';
-                    setTimeout(() => this.innerText = '📋 코드 복사', 1500);
-                }});
-            " style="
-                width:100%; padding:8px; border-radius:6px;
-                background:#0D9488; color:white; border:none;
-                font-size:14px; cursor:pointer; font-weight:600;
-            ">📋 코드 복사</button>
-            """
-            st.components.v1.html(copy_js, height=44)
+            if st.button("📋 코드 복사", use_container_width=True, key="copy_btn"):
+                st.session_state["_copy_code"] = current_code
+                st.toast("✅ 코드가 클립보드에 복사되었습니다!", icon="✅")
+            # 클립보드 복사는 JS로 처리 (버튼 클릭 후 실행)
+            if st.session_state.get("_copy_code") == current_code:
+                escaped = current_code.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                st.components.v1.html(
+                    f"<script>navigator.clipboard.writeText(`{escaped}`);</script>",
+                    height=0,
+                )
+                st.session_state["_copy_code"] = None
 
         with dl_col:
             st.download_button(
