@@ -1,295 +1,362 @@
 import streamlit as st
 import anthropic
+from datetime import datetime
 
 # 페이지 설정
 st.set_page_config(
-    page_title="중3 생물 교사 챗봇",
+    page_title="중3 생물 단원퀴즈",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 커스텀 CSS - 다크 테마
+# CSS 스타일
 st.markdown("""
-<style>
-    body {
-        background-color: #1a1a1a;
-        color: #ffffff;
-    }
-    
-    .teacher-message {
-        background-color: #2d3f5f;
-        padding: 15px;
+    <style>
+    .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
         border-radius: 10px;
-        border-left: 5px solid #4a90e2;
-        margin: 10px 0;
-        color: #e8f0fe;
+        color: white;
+        margin-bottom: 20px;
     }
-    
-    .student-message {
-        background-color: #3d3d3d;
-        padding: 15px;
-        border-radius: 10px;
-        border-left: 5px solid #888;
-        margin: 10px 0;
-        color: #f0f0f0;
-    }
-    
-    .header-title {
-        color: #4a90e2;
-        text-align: center;
-        font-size: 2.5em;
-        font-weight: bold;
-        margin-bottom: 10px;
-    }
-    
-    .info-box {
-        background-color: #4d3d1f;
+    .quiz-box {
+        background-color: #f0f4ff;
         padding: 15px;
         border-radius: 8px;
-        border-left: 4px solid #ff9800;
+        border-left: 4px solid #667eea;
         margin: 10px 0;
-        color: #ffc966;
     }
-    
-    .stTextInput > div > div > input {
-        background-color: #2d2d2d;
-        color: #ffffff;
-        border: 1px solid #4a4a4a;
+    .answer-correct {
+        background-color: #d4edda;
+        padding: 10px;
+        border-radius: 5px;
+        border-left: 4px solid #28a745;
+        margin: 10px 0;
     }
-    
-    .stSelectbox > div > div > select {
-        background-color: #2d2d2d;
-        color: #ffffff;
+    .answer-incorrect {
+        background-color: #f8d7da;
+        padding: 10px;
+        border-radius: 5px;
+        border-left: 4px solid #dc3545;
+        margin: 10px 0;
     }
-    
-    .stButton > button {
-        background-color: #4a90e2;
-        color: #ffffff;
-        border: none;
+    .stats-box {
+        background-color: #e7f3ff;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
     }
-    
-    .stButton > button:hover {
-        background-color: #3a7fd8;
-    }
-    
-    .stExpander {
-        background-color: #2d2d2d;
-        border: 1px solid #4a4a4a;
-    }
-    
-    .stExpander > div > div > p {
-        color: #e8e8e8;
-    }
-    
-    [data-testid="stSidebar"] {
-        background-color: #1f1f1f;
-    }
-    
-    .stMarkdown, .stText {
-        color: #ffffff;
-    }
-    
-    hr {
-        border-color: #4a4a4a;
-    }
-    
-    .stCaption {
-        color: #888888;
-    }
-    
-    /* 채팅 입력창 다크 테마 */
-    [data-testid="stChatInput"] {
-        background-color: #2d2d2d;
-        border: 1px solid #4a4a4a;
-        color: #ffffff;
-    }
-
-    [data-testid="stChatInput"] textarea {
-        color: #ffffff !important;
-        background-color: #2d2d2d !important;
-    }
-</style>
+    </style>
 """, unsafe_allow_html=True)
 
-# 헤더
-st.markdown('<div class="header-title">🧬 중3 생물 교사 챗봇</div>', unsafe_allow_html=True)
-st.markdown("---")
+# 세션 상태 초기화
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "quiz_count" not in st.session_state:
+    st.session_state.quiz_count = 0
+if "correct_count" not in st.session_state:
+    st.session_state.correct_count = 0
+if "current_quiz" not in st.session_state:
+    st.session_state.current_quiz = None
+if "api_key" not in st.session_state:
+    st.session_state.api_key = None
 
 # 사이드바 설정
 with st.sidebar:
-    st.title("⚙️ 설정")
-
-    # API 키 입력
+    st.markdown("### ⚙️ 설정")
+    
     api_key = st.text_input(
-        "Anthropic API 키 입력",
+        "Claude API 키 입력",
         type="password",
         help="https://console.anthropic.com에서 발급받으세요"
     )
-
+    
+    if api_key:
+        st.session_state.api_key = api_key
+    
     st.markdown("---")
-
-    # 학습 주제 선택
-    st.subheader("📚 학습 주제")
-    topics = {
-        "세포와 조직": "세포의 구조, 분열, 조직",
-        "유전": "유전자, DNA, 상염색체 유전",
-        "진화와 다양성": "진화, 자연선택, 생물 다양성",
-        "생태계": "생산자, 소비자, 분해자, 에너지 흐름",
-        "인체 기관계": "소화계, 순환계, 호흡계, 신경계",
-        "자유 질문": "모든 생물 관련 질문 가능"
+    
+    units = {
+        "🔬 세포의 구조와 기능": "세포의 구조, 세포막, 핵, 미토콘드리아, 엽록체",
+        "🧬 유전자와 유전": "DNA, 염색체, 유전법칙, 멘델의 법칙",
+        "🌱 생식과 발생": "감수분열, 유사분열, 배자발생, 성장",
+        "🦠 생명의 다양성": "생물의 분류, 진화, 자연선택",
+        "⚙️ 신경과 호르몬": "신경계, 뉴런, 호르몬, 항상성",
+        "🫀 순환계와 호흡": "혈액순환, 심장, 폐호흡, 세포호흡",
+        "🥗 소화와 영양": "소화기관, 소화효소, 영양소, 대사",
+        "🛡️ 면역": "항원, 항체, 특이적 면역, 비특이적 면역"
     }
-
-    selected_topic = st.selectbox(
-        "학습하고 싶은 주제를 선택하세요:",
-        list(topics.keys()),
-        help="주제 선택 후 질문하면 더 맞춤형 답변을 받을 수 있습니다"
+    
+    selected_unit = st.selectbox(
+        "📚 학습 단원 선택",
+        options=list(units.keys()),
+        help="퀴즈를 풀 단원을 선택하세요"
     )
-
+    
     st.markdown("---")
-
-    with st.expander("💡 학습 팁"):
-        st.markdown("""
-        - **단계별 학습**: 기초 개념부터 시작하세요
-        - **예제 요청**: "~의 예를 들어줄 수 있나요?"
-        - **개념 설명**: "~가 뭔가요?" 형태로 질문하세요
-        - **문제 풀이**: 문제와 함께 풀이 과정을 설명해달라고 하세요
-        - **정리 요청**: "요점을 정리해줄 수 있나요?"
-        """)
-
-    st.markdown("---")
-
-    # 대화 초기화 버튼 (사이드바로 이동)
-    if st.button("🔄 대화 초기화", use_container_width=True):
-        st.session_state.messages = [
-            {
-                "role": "assistant",
-                "content": f"대화를 초기화했습니다. 다시 시작해볼까요? 😊\n\n**{selected_topic}** 주제로 궁금한 점을 물어봐주세요!"
-            }
-        ]
-        st.session_state.current_topic = selected_topic
+    
+    # 통계
+    st.markdown("### 📊 학습 통계")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("총 풀이 수", st.session_state.quiz_count)
+    with col2:
+        if st.session_state.quiz_count > 0:
+            accuracy = (st.session_state.correct_count / st.session_state.quiz_count) * 100
+            st.metric("정답률", f"{accuracy:.1f}%")
+        else:
+            st.metric("정답률", "0%")
+    
+    if st.button("🔄 통계 초기화", use_container_width=True):
+        st.session_state.quiz_count = 0
+        st.session_state.correct_count = 0
+        st.session_state.messages = []
         st.rerun()
 
-    st.caption("🚀 Powered by Claude Haiku 4.5")
-
-# 현재 주제 표시
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.markdown("""
-    <div class="info-box">
-        <strong>📖 현재 주제:</strong><br>
-        {topic}
+# 메인 화면
+st.markdown("""
+    <div class="main-header">
+        <h1>🧬 중학교 3학년 생물 단원퀴즈</h1>
+        <p>Claude AI 선생님과 함께 생물 개념을 재미있게 학습해보세요!</p>
     </div>
-    """.format(topic=selected_topic), unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# ✅ 세션 상태 초기화 (최초 1회만 실행)
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "assistant",
-            "content": f"안녕하세요! 👋 저는 중학교 생물 교사입니다.\n\n현재 **{selected_topic}** 주제로 학습 중이신 것 같네요.\n\n편하게 생물에 대해 질문해주세요. 저는 여러분의 궁금증을 명확하고 이해하기 쉽게 설명해드리겠습니다! 😊\n\n**어떤 질문이든 환영합니다:**\n- 개념 설명\n- 예제와 실생활 사례\n- 문제 풀이\n- 요점 정리"
-        }
-    ]
+# API 키 확인
+if not st.session_state.api_key:
+    st.warning("⚠️ 사이드바에서 Claude API 키를 입력해주세요.")
+    st.info("""
+    **API 키 발급 방법:**
+    1. [Anthropic Console](https://console.anthropic.com)에 접속
+    2. 계정 생성 및 로그인
+    3. API 키 발급
+    4. 발급된 키를 위의 입력칸에 붙여넣기
+    """)
+    st.stop()
 
-if "current_topic" not in st.session_state:
-    st.session_state.current_topic = selected_topic
+# Claude 클라이언트 초기화
+client = anthropic.Anthropic(api_key=st.session_state.api_key)
 
-# ✅ 주제 변경 감지
-if selected_topic != st.session_state.current_topic:
-    st.session_state.current_topic = selected_topic
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": f"주제가 **{selected_topic}** 으로 변경되었습니다. 궁금한 점을 편하게 물어봐주세요! 📚"
-    })
+# 퀴즈 생성 함수
+def generate_quiz(unit_name: str, unit_content: str) -> str:
+    """새로운 퀴즈를 생성합니다."""
+    
+    system_prompt = """당신은 중학교 3학년 생물 전담 교사입니다.
+    
+역할:
+- 학생 수준에 맞는 퀴즈를 생성합니다.
+- 한 번에 1개의 퀴즈만 제시합니다.
+- 퀴즈는 객관식(4지선다형) 또는 단답형입니다.
+- 교육적이고 재미있는 문제를 만듭니다.
 
-# 대화 표시
-st.subheader("💬 대화")
+퀴즈 생성 규칙:
+1. 반드시 [퀴즈 시작] 마크로 시작
+2. 문제를 명확하게 제시
+3. 선택지 또는 답변 형식 표시
+4. 한국어로 정확하게 표현
+5. 반드시 [퀴즈 끝] 마크로 종료
 
-for message in st.session_state.messages:
-    if message["role"] == "user":
-        st.markdown(
-            f'<div class="student-message"><strong>👤 학생:</strong><br>{message["content"]}</div>',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f'<div class="teacher-message"><strong>👨‍🏫 생물 선생님:</strong><br>{message["content"]}</div>',
-            unsafe_allow_html=True
-        )
+예시:
+[퀴즈 시작]
+문제: 미토콘드리아의 주요 기능은?
+① 광합성 수행
+② ATP 생성을 통한 에너지 공급 ✓
+③ 단백질 합성
+④ 소화 효소 분비
+[퀴즈 끝]"""
 
+    user_message = f"""
+다음 단원에서 새로운 퀴즈를 하나 생성해주세요:
+단원: {unit_name}
+내용: {unit_content}
+
+이전에 출제한 퀴즈:
+{chr(10).join([msg['content'][:100] + '...' if len(msg['content']) > 100 else msg['content'] for msg in st.session_state.messages[-6::2]])}
+
+위 퀴즈들과 중복되지 않는 새로운 퀴즈를 만들어주세요."""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=500,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}]
+    )
+    
+    return response.content[0].text
+
+# 답변 평가 함수
+def evaluate_answer(quiz: str, user_answer: str) -> tuple[bool, str]:
+    """학생의 답변을 평가합니다."""
+    
+    system_prompt = """당신은 중학교 3학년 생물 전담 교사입니다.
+
+역할:
+- 학생의 퀴즈 답변을 평가합니다.
+- 정답 여부를 판정합니다.
+- 친절하고 격려적인 피드백을 제공합니다.
+- 정답과 해설을 제시합니다.
+
+평가 규칙:
+1. 반드시 [평가 시작] 마크로 시작
+2. 정답 여부: "정답입니다" 또는 "틀렸습니다"
+3. 정답 제시
+4. 간단한 해설 (2-3줄)
+5. 격려 메시지
+6. 반드시 [평가 끝] 마크로 종료"""
+
+    user_message = f"""
+다음 퀴즈에 대한 학생의 답변을 평가해주세요:
+
+[퀴즈]
+{quiz}
+
+[학생 답변]
+{user_answer}
+
+답변을 평가하고 피드백을 제공해주세요."""
+
+    response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}]
+    )
+    
+    response_text = response.content[0].text
+    is_correct = "정답입니다" in response_text
+    
+    return is_correct, response_text
+
+# 메인 콘텐츠
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.markdown(f"### 📖 {selected_unit}")
+    units = {
+        "🔬 세포의 구조와 기능": "세포의 구조, 세포막, 핵, 미토콘드리아, 엽록체",
+        "🧬 유전자와 유전": "DNA, 염색체, 유전법칙, 멘델의 법칙",
+        "🌱 생식과 발생": "감수분열, 유사분열, 배자발생, 성장",
+        "🦠 생명의 다양성": "생물의 분류, 진화, 자연선택",
+        "⚙️ 신경과 호르몬": "신경계, 뉴런, 호르몬, 항상성",
+        "🫀 순환계와 호흡": "혈액순환, 심장, 폐호흡, 세포호흡",
+        "🥗 소화와 영양": "소화기관, 소화효소, 영양소, 대사",
+        "🛡️ 면역": "항원, 항체, 특이적 면역, 비특이적 면역"
+    }
+    unit_content = units[selected_unit]
+
+with col2:
+    st.markdown("### 🎯 현재 상태")
+    st.write(f"**문제 풀이**: {st.session_state.quiz_count}")
+    st.write(f"**맞춘 문제**: {st.session_state.correct_count}")
+
+# 퀴즈 영역
 st.markdown("---")
 
-# ✅ 핵심 수정: st.chat_input 사용 → 전송 시 단 1회만 실행됨
-user_input = st.chat_input("질문을 입력하세요. 예: 세포의 구조를 설명해줄 수 있나요?")
-
-if user_input:
-    if not api_key:
-        st.error("⚠️ 사이드바에서 API 키를 입력해주세요!")
-    else:
-        # ✅ 사용자 메시지를 세션에 추가
-        st.session_state.messages.append({
-            "role": "user",
-            "content": user_input
-        })
-
+if st.button("📝 새 퀴즈 생성", use_container_width=True, type="primary"):
+    with st.spinner("퀴즈를 생성 중입니다..."):
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-
-            system_prompt = f"""당신은 중학교 3학년 생물 담당 선생님입니다.
-
-다음 원칙을 따르세요:
-1. 학생의 수준에 맞게 설명하세요 (쉽고 명확하게)
-2. 현재 학습 주제: {selected_topic}
-3. 예제와 실생활 사례를 포함하세요
-4. 학생을 격려하고 긍정적인 태도를 유지하세요
-5. 복잡한 개념은 단계별로 설명하세요
-6. 비유나 그림으로 설명할 수 있다면 텍스트로 표현하세요
-7. 마크다운 형식을 사용해 답변을 보기 좋게 구성하세요
-8. 답변 끝에 "더 궁금한 점이 있나요?" 같은 격려 문구를 추가하세요
-
-학생들의 학습을 돕는 친절한 선생님이 되세요!"""
-
-            with st.spinner("선생님이 답변을 준비 중입니다... 🤔"):
-                # ✅ API 전달 메시지: user/assistant 교대 구조만 전달
-                api_messages = [
-                    {"role": msg["role"], "content": msg["content"]}
-                    for msg in st.session_state.messages
-                    if msg["role"] in ("user", "assistant")
-                ]
-
-                response = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=1024,
-                    system=system_prompt,
-                    messages=api_messages
-                )
-
-                assistant_message = response.content[0].text
-
-                # ✅ AI 응답을 세션에 추가
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": assistant_message
-                })
-
-        except anthropic.AuthenticationError:
-            # ✅ 오류 발생 시 잘못 추가된 user 메시지 롤백
-            st.session_state.messages.pop()
-            st.error("❌ API 키가 올바르지 않습니다. https://console.anthropic.com 에서 확인해주세요.")
-        except anthropic.NotFoundError:
-            st.session_state.messages.pop()
-            st.error("❌ 모델을 찾을 수 없습니다. API 키 권한을 확인해주세요.")
-        except anthropic.RateLimitError:
-            st.session_state.messages.pop()
-            st.error("⏱️ 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
-        except anthropic.APIError as e:
-            st.session_state.messages.pop()
-            st.error(f"❌ API 오류가 발생했습니다: {str(e)}")
+            quiz = generate_quiz(selected_unit, unit_content)
+            st.session_state.current_quiz = quiz
+            st.session_state.messages.append({"role": "assistant", "content": quiz})
+            st.rerun()
         except Exception as e:
-            st.session_state.messages.pop()
-            st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
+            st.error(f"❌ 오류 발생: {str(e)}")
 
-        # ✅ 정상 처리 후 1회만 rerun
-        st.rerun()
+# 현재 퀴즈 표시
+if st.session_state.current_quiz:
+    st.markdown("""<div class="quiz-box">""", unsafe_allow_html=True)
+    st.markdown("### 📋 현재 문제")
+    st.markdown(st.session_state.current_quiz)
+    st.markdown("""</div>""", unsafe_allow_html=True)
+    
+    # 답변 입력
+    st.markdown("### ✍️ 당신의 답변")
+    user_answer = st.text_area(
+        "답변을 입력하세요",
+        placeholder="예) ② 번 선택\n또는\n세포막은 인지질 이중층으로 구성되어 있습니다.",
+        label_visibility="collapsed",
+        height=80
+    )
+    
+    col1, col2, col3 = st.columns([1, 1, 1])
+    
+    with col1:
+        if st.button("✅ 답변 제출", use_container_width=True, type="primary"):
+            if user_answer.strip():
+                with st.spinner("답변을 평가 중입니다..."):
+                    try:
+                        is_correct, feedback = evaluate_answer(
+                            st.session_state.current_quiz,
+                            user_answer
+                        )
+                        
+                        # 통계 업데이트
+                        st.session_state.quiz_count += 1
+                        if is_correct:
+                            st.session_state.correct_count += 1
+                        
+                        # 메시지 저장
+                        st.session_state.messages.append({"role": "user", "content": user_answer})
+                        st.session_state.messages.append({"role": "assistant", "content": feedback})
+                        st.session_state.current_quiz = None
+                        
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ 오류 발생: {str(e)}")
+            else:
+                st.warning("답변을 입력해주세요.")
+    
+    with col2:
+        if st.button("💡 힌트 요청", use_container_width=True):
+            with st.spinner("힌트를 생성 중입니다..."):
+                try:
+                    hint_prompt = f"""다음 퀴즈에 대해 학생의 답변을 돕는 힌트를 간단히(2줄 이내) 제시해주세요:
 
-st.caption("© 2024 생물 학습 챗봇 | Streamlit + Claude Haiku 4.5")
+[퀴즈]
+{st.session_state.current_quiz}
+
+학생이 스스로 답할 수 있도록 도움을 주는 힌트를 제시하세요."""
+
+                    response = client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=200,
+                        messages=[{"role": "user", "content": hint_prompt}]
+                    )
+                    
+                    st.info(f"💡 **힌트**: {response.content[0].text}")
+                except Exception as e:
+                    st.error(f"❌ 오류 발생: {str(e)}")
+    
+    with col3:
+        if st.button("⏭️ 다음 문제", use_container_width=True):
+            st.session_state.current_quiz = None
+            st.rerun()
+
+# 대화 히스토리 표시
+if st.session_state.messages:
+    st.markdown("---")
+    st.markdown("### 📚 학습 기록")
+    
+    for i in range(len(st.session_state.messages) - 1, -1, -2):
+        if i >= 1:
+            quiz = st.session_state.messages[i-1]["content"]
+            feedback = st.session_state.messages[i]["content"]
+            
+            with st.expander(f"📖 문제 {(len(st.session_state.messages) - i) // 2}"):
+                st.markdown("**문제:**")
+                st.markdown(quiz[:200] + ("..." if len(quiz) > 200 else ""))
+                st.markdown("**피드백:**")
+                
+                if "정답입니다" in feedback:
+                    st.markdown(f"""<div class="answer-correct">{feedback}</div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""<div class="answer-incorrect">{feedback}</div>""", unsafe_allow_html=True)
+
+# 푸터
+st.markdown("---")
+st.markdown("""
+<div style="text-align: center; color: gray; font-size: 12px; margin-top: 20px;">
+    <p>🧬 중학교 3학년 생물 단원퀴즈 | Claude AI 교사</p>
+    <p>Powered by Anthropic Claude Haiku</p>
+</div>
+""", unsafe_allow_html=True)
