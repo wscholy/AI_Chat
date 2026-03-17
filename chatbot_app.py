@@ -104,6 +104,11 @@ st.markdown("""
     .stTabs [data-baseweb="tab-list"] button {
         color: #ffffff;
     }
+    
+    .stInfo {
+        background-color: #2d3f5f;
+        color: #e8f0fe;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -154,7 +159,7 @@ with st.sidebar:
         """)
     
     st.markdown("---")
-    st.caption("🚀 Powered by Claude 3.5 Haiku")
+    st.caption("🚀 Powered by Claude Haiku 4.5")
 
 # 메인 콘텐츠
 col1, col2 = st.columns([1, 4])
@@ -250,7 +255,7 @@ if user_input:
             
             with st.spinner("선생님이 답변을 준비 중입니다... 🤔"):
                 message = client.messages.create(
-                    model="claude-3-5-haiku-20241022",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=1024,
                     system=system_prompt,
                     messages=[
@@ -272,11 +277,16 @@ if user_input:
                 st.rerun()
                 
         except anthropic.AuthenticationError:
-            st.error("❌ API 키가 올바르지 않습니다. 다시 확인해주세요.")
+            st.error("❌ API 키가 올바르지 않습니다. https://console.anthropic.com 에서 API 키를 확인해주세요.")
+        except anthropic.NotFoundError as e:
+            st.error("❌ 모델을 찾을 수 없습니다. API 키와 모델명을 확인해주세요.")
+            st.info("현재 사용 중인 모델: `claude-haiku-4-5-20251001`")
         except anthropic.RateLimitError:
             st.error("⏱️ 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.")
+        except anthropic.APIError as e:
+            st.error(f"❌ API 오류가 발생했습니다: {str(e)}")
         except Exception as e:
-            st.error(f"❌ 오류가 발생했습니다: {str(e)}")
+            st.error(f"❌ 예상치 못한 오류가 발생했습니다: {str(e)}")
 
 # 초기화 버튼
 st.markdown("---")
@@ -294,7 +304,7 @@ with col1:
 
 with col2:
     if st.button("💾 대화 저장 (준비 중)", use_container_width=True):
-        st.info("대화 저장 기능은 준비 중입니다.")
+        st.info("💡 대화 저장 기능은 준비 중입니다.")
 
 with col3:
     if st.button("❓ 도움말", use_container_width=True):
@@ -308,4 +318,4 @@ with col3:
         """)
 
 st.markdown("---")
-st.caption("© 2024 생물 학습 챗봇 | Streamlit + Claude 3.5 Haiku")
+st.caption("© 2024 생물 학습 챗봇 | Streamlit + Claude Haiku 4.5")
