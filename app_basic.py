@@ -113,7 +113,7 @@ def stream_response(client, messages):
     placeholder = st.empty()
     with client.messages.stream(
         model=model,
-        max_tokens=8192,
+        max_tokens=12000,
         system=SYSTEM_PROMPT,
         messages=messages,
     ) as stream:
