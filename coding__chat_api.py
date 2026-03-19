@@ -72,6 +72,39 @@ h1, h2, h3, h4, h5, h6, p, span, div, label {
     font-size: 0.82rem;
     line-height: 1.55;
 }
+.model-card {
+    background: #0d1117;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 10px 13px;
+    margin-top: 8px;
+    transition: border-color 0.2s;
+}
+.model-card:hover { border-color: #388bfd; }
+.model-name {
+    color: #f0f6fc !important;
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+.model-desc {
+    color: #8b949e !important;
+    font-size: 0.77rem;
+    margin-top: 3px;
+    line-height: 1.4;
+}
+.badge {
+    display: inline-block;
+    border-radius: 20px;
+    padding: 2px 9px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.badge-new    { background:#0d3b2e; color:#3fb950 !important; border:1px solid #238636; }
+.badge-fast   { background:#172a45; color:#79c0ff !important; border:1px solid #388bfd; }
+.badge-smart  { background:#2d1b69; color:#d2a8ff !important; border:1px solid #8957e5; }
+.badge-power  { background:#3b1a1a; color:#ff7b72 !important; border:1px solid #da3633; }
 .model-badge {
     display: inline-block;
     background: #0d3b2e;
@@ -194,37 +227,19 @@ div[data-baseweb="select"] > div {
     border: 1px solid #30363d !important;
     color: #e6edf3 !important;
 }
-div[data-baseweb="popover"] {
-    background: #161b22 !important;
-    border: 1px solid #30363d !important;
-}
-div[data-baseweb="menu"] {
-    background: #161b22 !important;
-}
-div[data-baseweb="option"] {
-    background: #161b22 !important;
-    color: #e6edf3 !important;
-}
-div[data-baseweb="option"]:hover {
-    background: #1c2333 !important;
-}
+div[data-baseweb="popover"] { background: #161b22 !important; border: 1px solid #30363d !important; }
+div[data-baseweb="menu"]    { background: #161b22 !important; }
+div[data-baseweb="option"]  { background: #161b22 !important; color: #e6edf3 !important; }
+div[data-baseweb="option"]:hover { background: #1c2333 !important; }
 .stAlert {
     background: #161b22 !important;
     border: 1px solid #30363d !important;
     color: #e6edf3 !important;
     border-radius: 8px !important;
 }
-hr {
-    border-color: #21262d !important;
-    margin: 14px 0 !important;
-}
-.stSpinner > div {
-    border-top-color: #388bfd !important;
-}
-.stForm {
-    background: transparent !important;
-    border: none !important;
-}
+hr { border-color: #21262d !important; margin: 14px 0 !important; }
+.stSpinner > div { border-top-color: #388bfd !important; }
+.stForm { background: transparent !important; border: none !important; }
 .stFormSubmitButton > button {
     background: linear-gradient(135deg, #1565c0, #1976d2) !important;
     color: #f0f6fc !important;
@@ -265,7 +280,7 @@ def init_session():
     defaults = {
         "messages"       : [],
         "api_key"        : "",
-        "selected_model" : "claude-sonnet-4-5",
+        "selected_model" : "claude-opus-4-5",   # 기본값: 최신 최고 성능 모델
         "msg_count"      : 0,
     }
     for k, v in defaults.items():
@@ -275,17 +290,43 @@ def init_session():
 init_session()
 
 
-# ── 모델 목록
+# ── 최신 모델 목록 (2025년 기준 최신순)
+# 각 항목: (표시이름, 배지종류, 배지텍스트, 설명)
 MODELS = {
-    "claude-sonnet-4-5"          : "Claude Sonnet 4.5  (권장)",
-    "claude-opus-4-5"            : "Claude Opus 4.5    (최고 성능)",
-    "claude-haiku-3-5"           : "Claude Haiku 3.5   (초고속)",
-    "claude-opus-4-0"            : "Claude Opus 4.0    (고급)",
-    "claude-3-7-sonnet-20250219" : "Claude Sonnet 3.7  (고급 추론)",
+    "claude-opus-4-5": (
+        "Claude Opus 4.5",
+        "badge-power",
+        "최신 최강",
+        "2025년 최신 플래그십 모델. 최고 수준의 추론 및 코딩 성능.",
+    ),
+    "claude-sonnet-4-5": (
+        "Claude Sonnet 4.5",
+        "badge-new",
+        "최신 권장",
+        "최신 Sonnet 계열. 성능과 속도의 완벽한 균형.",
+    ),
+    "claude-opus-4-0": (
+        "Claude Opus 4.0",
+        "badge-smart",
+        "고성능",
+        "강력한 추론 능력. 복잡한 코딩 문제에 최적.",
+    ),
+    "claude-sonnet-4-0": (
+        "Claude Sonnet 4.0",
+        "badge-fast",
+        "균형",
+        "빠른 응답과 높은 품질의 균형잡힌 모델.",
+    ),
+    "claude-haiku-3-5": (
+        "Claude Haiku 3.5",
+        "badge-fast",
+        "초고속",
+        "가장 빠른 응답. 간단한 질문 및 빠른 코드 확인에 적합.",
+    ),
 }
 
 
-# ── 시스템 프롬프트 (백틱/특수문자 충돌 완전 회피)
+# ── 시스템 프롬프트
 def build_system_prompt():
     lines = [
         "당신은 AI 융합전공 교수입니다. 학생들의 프로그래밍 학습을 돕는 전문 코딩 멘토입니다.",
@@ -345,7 +386,6 @@ def render_messages():
     for msg in st.session_state.messages:
         role    = msg["role"]
         content = msg["content"]
-
         if role == "user":
             c1, c2 = st.columns([0.91, 0.09])
             with c1:
@@ -359,14 +399,13 @@ def render_messages():
                     unsafe_allow_html=True,
                 )
         else:
-            c1, c2 = st.columns([0.09, 0.91])
+            c1, c2 = st.columns([0.06, 0.94])
             with c1:
                 st.markdown(
                     '<div class="avatar-box av-assistant" style="margin-top:2px;">🎓</div>',
                     unsafe_allow_html=True,
                 )
             with c2:
-                # st.markdown 으로 코드 하이라이팅 지원
                 st.markdown(content)
 
 
@@ -374,7 +413,6 @@ def render_messages():
 # 사이드바
 # ══════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    # 프로필
     st.markdown(
         '<div style="text-align:center;padding:14px 0 6px;">'
         '<div style="font-size:2.8rem;">🎓</div>'
@@ -385,11 +423,8 @@ with st.sidebar:
     )
     st.markdown("---")
 
-    # API 키
-    st.markdown(
-        '<div class="info-card"><h4>API 설정</h4></div>',
-        unsafe_allow_html=True,
-    )
+    # ── API 키
+    st.markdown('<div class="info-card"><h4>API 설정</h4></div>', unsafe_allow_html=True)
     api_key_input = st.text_input(
         "Anthropic API Key",
         type="password",
@@ -410,32 +445,51 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # 모델 선택
-    st.markdown(
-        '<div class="info-card"><h4>모델 선택</h4></div>',
-        unsafe_allow_html=True,
-    )
+    # ── 모델 선택
+    st.markdown('<div class="info-card"><h4>모델 선택</h4></div>', unsafe_allow_html=True)
+
+    model_keys = list(MODELS.keys())
     selected_model = st.selectbox(
         "Claude 모델",
-        options=list(MODELS.keys()),
-        format_func=lambda x: MODELS[x],
-        index=list(MODELS.keys()).index(st.session_state.selected_model),
+        options=model_keys,
+        format_func=lambda x: MODELS[x][0],
+        index=model_keys.index(st.session_state.selected_model),
+        help="최신 모델일수록 성능이 높으며 비용이 증가할 수 있습니다.",
     )
     st.session_state.selected_model = selected_model
+
+    # 선택된 모델 상세 카드
+    m_name, m_badge, m_badge_txt, m_desc = MODELS[selected_model]
     st.markdown(
-        '<div style="margin-top:5px;">'
-        '<span class="model-badge">' + selected_model + '</span>'
+        '<div class="model-card">'
+        '<div class="model-name">'
+        + m_name +
+        '<span class="badge ' + m_badge + '">' + m_badge_txt + '</span>'
+        '</div>'
+        '<div class="model-desc">' + m_desc + '</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # 모델 비교 안내
+    st.markdown(
+        '<div class="info-card" style="margin-top:10px;">'
+        '<h4>모델 선택 가이드</h4>'
+        '<p>'
+        '<b style="color:#ff7b72;">Opus 4.5</b> : 최신 최고 성능, 복잡한 문제<br>'
+        '<b style="color:#3fb950;">Sonnet 4.5</b> : 최신 균형형, 일반 코딩<br>'
+        '<b style="color:#d2a8ff;">Opus 4.0</b> : 강력한 추론, 설계 문제<br>'
+        '<b style="color:#79c0ff;">Sonnet 4.0</b> : 빠른 균형형 응답<br>'
+        '<b style="color:#79c0ff;">Haiku 3.5</b> : 초고속, 간단한 질문'
+        '</p>'
         '</div>',
         unsafe_allow_html=True,
     )
 
     st.markdown("---")
 
-    # 통계
-    st.markdown(
-        '<div class="info-card"><h4>대화 통계</h4></div>',
-        unsafe_allow_html=True,
-    )
+    # ── 통계
+    st.markdown('<div class="info-card"><h4>대화 통계</h4></div>', unsafe_allow_html=True)
     q_count = st.session_state.msg_count
     t_count = len(st.session_state.messages)
     st.markdown(
@@ -454,11 +508,8 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # 빠른 질문
-    st.markdown(
-        '<div class="info-card"><h4>빠른 질문</h4></div>',
-        unsafe_allow_html=True,
-    )
+    # ── 빠른 질문
+    st.markdown('<div class="info-card"><h4>빠른 질문</h4></div>', unsafe_allow_html=True)
     quick_questions = [
         ("Python 기초 설명",
          "Python의 리스트 컴프리헨션과 일반 for 루프의 차이점과 각각의 적절한 사용 시기를 알려주세요."),
@@ -507,7 +558,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 환영 카드 (대화 없을 때)
+# 환영 카드
 if not st.session_state.messages:
     c1, c2, c3 = st.columns(3)
     welcome_items = [
@@ -582,10 +633,11 @@ elif submit and not user_input.strip():
     st.warning("메시지를 입력해 주세요.")
 
 # 하단 푸터
+cur_model_name = MODELS[st.session_state.selected_model][0]
 st.markdown(
     '<div class="footer-bar">'
     'AI 융합전공 코딩 도우미 &nbsp;|&nbsp; Powered by Anthropic Claude &nbsp;|&nbsp; 현재 모델: '
-    + st.session_state.selected_model +
+    + cur_model_name +
     '</div>',
     unsafe_allow_html=True,
 )
