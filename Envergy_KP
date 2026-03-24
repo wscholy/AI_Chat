@@ -1,0 +1,845 @@
+import streamlit as st
+import anthropic
+import json
+import math
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import numpy as np
+
+# ──────────────────────────────────────────────
+# 페이지 설정
+# ──────────────────────────────────────────────
+st.set_page_config(
+    page_title="⚡ 에너지 전환 물리 교실",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ──────────────────────────────────────────────
+# CSS 스타일
+# ──────────────────────────────────────────────
+st.markdown("""
+<style>
+    /* 전체 배경 */
+    .stApp {
+        background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+        color: #e0e0e0;
+    }
+
+    /* 사이드바 */
+    [data-testid="stSidebar"] {
+        background: rgba(255,255,255,0.05);
+        border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* 제목 영역 */
+    .main-title {
+        text-align: center;
+        padding: 20px;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        border-radius: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 20px rgba(102,126,234,0.4);
+    }
+    .main-title h1 {
+        color: white;
+        font-size: 2rem;
+        margin: 0;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    .main-title p {
+        color: rgba(255,255,255,0.85);
+        margin: 5px 0 0 0;
+        font-size: 1rem;
+    }
+
+    /* 채팅 메시지 */
+    .chat-message-user {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 18px 18px 4px 18px;
+        padding: 12px 16px;
+        margin: 8px 0;
+        margin-left: 20%;
+        color: white;
+        box-shadow: 0 2px 10px rgba(102,126,234,0.3);
+    }
+    .chat-message-assistant {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 18px 18px 18px 4px;
+        padding: 12px 16px;
+        margin: 8px 0;
+        margin-right: 10%;
+        color: #e0e0e0;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    }
+
+    /* 에너지 카드 */
+    .energy-card {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 12px;
+        padding: 15px;
+        margin: 8px 0;
+        transition: all 0.3s ease;
+    }
+    .energy-card:hover {
+        background: rgba(255,255,255,0.1);
+        border-color: rgba(102,126,234,0.5);
+    }
+
+    /* 수식 박스 */
+    .formula-box {
+        background: rgba(102,126,234,0.15);
+        border: 1px solid rgba(102,126,234,0.4);
+        border-radius: 10px;
+        padding: 12px;
+        margin: 10px 0;
+        font-family: 'Courier New', monospace;
+        color: #a8b8ff;
+    }
+
+    /* 버튼 스타일 재정의 */
+    .stButton > button {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 20px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 10px rgba(102,126,234,0.3);
+    }
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(102,126,234,0.5);
+    }
+
+    /* 인포 박스 */
+    .info-badge {
+        display: inline-block;
+        background: rgba(102,126,234,0.2);
+        border: 1px solid rgba(102,126,234,0.4);
+        border-radius: 20px;
+        padding: 4px 12px;
+        font-size: 0.8rem;
+        color: #a8b8ff;
+        margin: 3px;
+    }
+
+    /* 슬라이더 레이블 */
+    .stSlider label {
+        color: #c0c0c0 !important;
+    }
+
+    /* 탭 스타일 */
+    .stTabs [data-baseweb="tab-list"] {
+        background: rgba(255,255,255,0.05);
+        border-radius: 10px;
+        padding: 4px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        color: #a0a0a0;
+        border-radius: 8px;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #667eea, #764ba2) !important;
+        color: white !important;
+    }
+
+    /* 구분선 */
+    hr {
+        border-color: rgba(255,255,255,0.1);
+    }
+
+    /* 메트릭 */
+    [data-testid="metric-container"] {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# 시스템 프롬프트
+# ──────────────────────────────────────────────
+SYSTEM_PROMPT = """
+당신은 '김에너지' 선생님입니다. 중학교 물리를 가르치는 열정적이고 친절한 교사입니다.
+
+## 전문 분야
+- 운동에너지(KE): 움직이는 물체가 가진 에너지 (KE = ½mv²)
+- 위치에너지(PE): 높이에 의한 에너지 (PE = mgh)  
+- 역학적 에너지 보존 법칙: KE + PE = 일정 (마찰 무시 시)
+- 에너지 전환 현상 (자유낙하, 진자, 롤러코스터, 공 던지기 등)
+
+## 교육 방침
+1. **쉬운 언어 사용**: 중학생이 이해할 수 있도록 일상 언어로 설명
+2. **실생활 예시**: 롤러코스터, 그네, 미끄럼틀, 스키 점프 등 친숙한 예시 활용
+3. **단계별 설명**: 개념 → 공식 → 예시 → 계산 순서로 설명
+4. **격려**: 틀린 답도 칭찬하며 올바른 방향으로 안내
+5. **질문 유도**: 설명 후 학생이 생각해볼 질문 제시
+
+## 응답 형식
+- 이모지를 적극 활용 (⚡, 🎢, 🏀, 📐 등)
+- 핵심 공식은 박스 표시로 강조
+- 숫자 계산 시 단계별로 명확하게 풀이
+- 응답 길이: 간결하되 핵심은 빠짐없이 (200~400자 적정)
+
+## 주의사항
+- 물리 이외의 주제는 "저는 물리 선생님이라 그 분야는 잘 모르지만..." 으로 시작
+- 욕설·부적절한 내용은 정중히 거절
+- 계산 오류가 없도록 신중하게 검토
+
+학생들이 에너지 전환의 아름다움을 발견하도록 도와주세요! 🌟
+"""
+
+# ──────────────────────────────────────────────
+# 에너지 계산 함수
+# ──────────────────────────────────────────────
+def calc_kinetic_energy(mass: float, velocity: float) -> float:
+    """운동에너지 = 0.5 * m * v^2"""
+    return 0.5 * mass * velocity ** 2
+
+def calc_potential_energy(mass: float, height: float, g: float = 9.8) -> float:
+    """위치에너지 = m * g * h"""
+    return mass * g * height
+
+def simulate_free_fall(mass: float, initial_height: float, g: float = 9.8) -> dict:
+    """자유낙하 시뮬레이션 데이터 생성"""
+    # 떨어지는 시간
+    total_time = math.sqrt(2 * initial_height / g)
+    time_steps = np.linspace(0, total_time, 200)
+
+    heights, velocities, ke_list, pe_list, te_list = [], [], [], [], []
+
+    for t in time_steps:
+        h = initial_height - 0.5 * g * t**2
+        h = max(0, h)
+        v = g * t if h > 0 else math.sqrt(2 * g * initial_height)
+        ke = calc_kinetic_energy(mass, v)
+        pe = calc_potential_energy(mass, h, g)
+        te = ke + pe
+
+        heights.append(round(h, 3))
+        velocities.append(round(v, 3))
+        ke_list.append(round(ke, 3))
+        pe_list.append(round(pe, 3))
+        te_list.append(round(te, 3))
+
+    return {
+        "time": time_steps.tolist(),
+        "height": heights,
+        "velocity": velocities,
+        "KE": ke_list,
+        "PE": pe_list,
+        "TE": te_list,
+        "total_time": round(total_time, 3),
+        "max_velocity": round(math.sqrt(2 * g * initial_height), 3),
+        "initial_PE": round(calc_potential_energy(mass, initial_height, g), 3),
+    }
+
+def simulate_pendulum(mass: float, length: float, angle_deg: float, g: float = 9.8) -> dict:
+    """진자 시뮬레이션 데이터 생성"""
+    angle_rad = math.radians(angle_deg)
+    max_height = length * (1 - math.cos(angle_rad))
+    period = 2 * math.pi * math.sqrt(length / g)
+    time_steps = np.linspace(0, 2 * period, 400)
+
+    angles, heights, velocities, ke_list, pe_list = [], [], [], [], []
+    omega = math.sqrt(g / length)
+
+    for t in time_steps:
+        theta = angle_rad * math.cos(omega * t)
+        h = length * (1 - math.cos(theta))
+        v = math.sqrt(max(0, 2 * g * (max_height - h)))
+        ke = calc_kinetic_energy(mass, v)
+        pe = calc_potential_energy(mass, h, g)
+
+        angles.append(round(math.degrees(theta), 3))
+        heights.append(round(h, 4))
+        velocities.append(round(v, 4))
+        ke_list.append(round(ke, 4))
+        pe_list.append(round(pe, 4))
+
+    return {
+        "time": time_steps.tolist(),
+        "angle": angles,
+        "height": heights,
+        "velocity": velocities,
+        "KE": ke_list,
+        "PE": pe_list,
+        "TE": [round(ke + pe, 4) for ke, pe in zip(ke_list, pe_list)],
+        "period": round(period, 3),
+        "max_height": round(max_height, 4),
+        "max_velocity": round(math.sqrt(2 * g * max_height), 4),
+        "initial_PE": round(calc_potential_energy(mass, max_height, g), 4),
+    }
+
+def simulate_roller_coaster(mass: float, heights_list: list, g: float = 9.8) -> dict:
+    """롤러코스터 시뮬레이션 - 여러 지점의 에너지 계산"""
+    max_h = max(heights_list)
+    total_energy = calc_potential_energy(mass, max_h, g)
+    results = []
+
+    for i, h in enumerate(heights_list):
+        pe = calc_potential_energy(mass, h, g)
+        ke = total_energy - pe
+        ke = max(0, ke)
+        v = math.sqrt(2 * ke / mass) if ke > 0 else 0
+        results.append({
+            "point": f"지점 {i+1}",
+            "height": h,
+            "PE": round(pe, 2),
+            "KE": round(ke, 2),
+            "TE": round(pe + ke, 2),
+            "velocity": round(v, 2),
+        })
+    return results
+
+# ──────────────────────────────────────────────
+# 그래프 생성 함수
+# ──────────────────────────────────────────────
+def plot_energy_chart(sim_data: dict, title: str = "에너지 변환 그래프") -> go.Figure:
+    """에너지 변화 그래프"""
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=("높이 변화", "속도 변화", "에너지 분포 (애니메이션)", "에너지 전환"),
+        specs=[[{"type": "scatter"}, {"type": "scatter"}],
+               [{"type": "scatter"}, {"type": "scatter"}]]
+    )
+
+    t = sim_data["time"]
+    colors = {"KE": "#ff6b6b", "PE": "#4ecdc4", "TE": "#ffd93d"}
+
+    # 높이 변화
+    fig.add_trace(go.Scatter(
+        x=t, y=sim_data["height"],
+        name="높이(m)", line=dict(color="#a8b8ff", width=2),
+        showlegend=True
+    ), row=1, col=1)
+
+    # 속도 변화
+    fig.add_trace(go.Scatter(
+        x=t, y=sim_data["velocity"],
+        name="속도(m/s)", line=dict(color="#ff9f43", width=2),
+        showlegend=True
+    ), row=1, col=2)
+
+    # KE, PE, TE 에너지 전환
+    for key, color in colors.items():
+        label = {"KE": "운동에너지", "PE": "위치에너지", "TE": "역학적에너지(합)"}[key]
+        fig.add_trace(go.Scatter(
+            x=t, y=sim_data[key],
+            name=label, line=dict(color=color, width=2,
+                                  dash="dot" if key == "TE" else "solid"),
+            showlegend=True
+        ), row=2, col=2)
+
+    # 에너지 분포 (특정 시점)
+    mid_idx = len(t) // 2
+    fig.add_trace(go.Bar(
+        x=["운동에너지", "위치에너지"],
+        y=[sim_data["KE"][mid_idx], sim_data["PE"][mid_idx]],
+        marker_color=["#ff6b6b", "#4ecdc4"],
+        showlegend=False,
+        name="중간 지점"
+    ), row=2, col=1)
+
+    fig.update_layout(
+        title=dict(text=title, font=dict(color="white", size=16)),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(255,255,255,0.03)",
+        font=dict(color="#c0c0c0"),
+        legend=dict(
+            bgcolor="rgba(255,255,255,0.05)",
+            bordercolor="rgba(255,255,255,0.2)",
+            borderwidth=1
+        ),
+        height=500,
+    )
+    fig.update_xaxes(gridcolor="rgba(255,255,255,0.05)", zeroline=False)
+    fig.update_yaxes(gridcolor="rgba(255,255,255,0.05)", zeroline=False)
+
+    return fig
+
+def plot_roller_coaster(rc_data: list, heights_list: list) -> go.Figure:
+    """롤러코스터 에너지 그래프"""
+    points = [d["point"] for d in rc_data]
+    hs = [d["height"] for d in rc_data]
+    kes = [d["KE"] for d in rc_data]
+    pes = [d["PE"] for d in rc_data]
+    vs = [d["velocity"] for d in rc_data]
+
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=("롤러코스터 경로", "지점별 에너지"),
+        specs=[[{"type": "scatter"}, {"type": "bar"}]]
+    )
+
+    # 경로 + 높이
+    x_pos = list(range(len(hs)))
+    fig.add_trace(go.Scatter(
+        x=x_pos, y=hs,
+        fill="tozeroy",
+        fillcolor="rgba(102,126,234,0.2)",
+        line=dict(color="#667eea", width=3),
+        mode="lines+markers+text",
+        text=[f"v={v}m/s" for v in vs],
+        textposition="top center",
+        textfont=dict(size=9, color="#ffd93d"),
+        name="높이(m)"
+    ), row=1, col=1)
+
+    # 스택형 바 차트
+    fig.add_trace(go.Bar(
+        x=points, y=pes,
+        name="위치에너지", marker_color="#4ecdc4"
+    ), row=1, col=2)
+    fig.add_trace(go.Bar(
+        x=points, y=kes,
+        name="운동에너지", marker_color="#ff6b6b"
+    ), row=1, col=2)
+
+    fig.update_layout(
+        barmode="stack",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(255,255,255,0.03)",
+        font=dict(color="#c0c0c0"),
+        title=dict(text="🎢 롤러코스터 에너지 전환", font=dict(color="white", size=16)),
+        legend=dict(bgcolor="rgba(255,255,255,0.05)", bordercolor="rgba(255,255,255,0.2)"),
+        height=400,
+    )
+    fig.update_xaxes(gridcolor="rgba(255,255,255,0.05)")
+    fig.update_yaxes(gridcolor="rgba(255,255,255,0.05)")
+    return fig
+
+# ──────────────────────────────────────────────
+# Claude API 스트리밍 응답
+# ──────────────────────────────────────────────
+def stream_response(api_key: str, messages: list):
+    """Claude claude-sonnet-4-6 스트리밍 응답"""
+    client = anthropic.Anthropic(api_key=api_key)
+    with client.messages.stream(
+        model="claude-sonnet-4-5",
+        max_tokens=1024,
+        system=SYSTEM_PROMPT,
+        messages=messages,
+    ) as stream:
+        for text in stream.text_stream:
+            yield text
+
+# ──────────────────────────────────────────────
+# 세션 상태 초기화
+# ──────────────────────────────────────────────
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "api_key" not in st.session_state:
+    st.session_state.api_key = ""
+if "sim_type" not in st.session_state:
+    st.session_state.sim_type = "자유낙하"
+
+# ──────────────────────────────────────────────
+# 사이드바
+# ──────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### 🔑 API 설정")
+    api_key_input = st.text_input(
+        "Anthropic API Key",
+        type="password",
+        placeholder="sk-ant-...",
+        value=st.session_state.api_key,
+        help="Anthropic Console에서 발급받은 API 키를 입력하세요."
+    )
+    if api_key_input:
+        st.session_state.api_key = api_key_input
+        st.success("✅ API 키 설정 완료", icon="🔐")
+
+    st.divider()
+
+    # ── 시뮬레이션 선택 ──
+    st.markdown("### ⚙️ 시뮬레이션 설정")
+    sim_type = st.selectbox(
+        "시뮬레이션 종류",
+        ["자유낙하", "진자 운동", "롤러코스터"],
+        index=["자유낙하", "진자 운동", "롤러코스터"].index(st.session_state.sim_type)
+    )
+    st.session_state.sim_type = sim_type
+
+    mass = st.slider("질량 (kg)", 0.1, 20.0, 1.0, 0.1)
+    g = st.slider("중력가속도 (m/s²)", 1.0, 25.0, 9.8, 0.1)
+
+    if sim_type == "자유낙하":
+        init_height = st.slider("초기 높이 (m)", 1.0, 100.0, 20.0, 1.0)
+    elif sim_type == "진자 운동":
+        pendulum_len = st.slider("진자 길이 (m)", 0.5, 10.0, 2.0, 0.1)
+        swing_angle = st.slider("초기 각도 (°)", 5.0, 80.0, 30.0, 1.0)
+    else:
+        st.markdown("**롤러코스터 높이 설정 (m)**")
+        h1 = st.slider("지점1 높이", 0.0, 50.0, 40.0, 1.0)
+        h2 = st.slider("지점2 높이", 0.0, 50.0, 10.0, 1.0)
+        h3 = st.slider("지점3 높이", 0.0, 50.0, 30.0, 1.0)
+        h4 = st.slider("지점4 높이", 0.0, 50.0, 5.0, 1.0)
+        h5 = st.slider("지점5 높이", 0.0, 50.0, 15.0, 1.0)
+
+    run_sim = st.button("🚀 시뮬레이션 실행", use_container_width=True)
+
+    st.divider()
+
+    # ── 빠른 질문 ──
+    st.markdown("### 💬 빠른 질문")
+    quick_qs = [
+        "운동에너지 공식을 설명해줘",
+        "위치에너지란 무엇인가요?",
+        "에너지 보존 법칙이란?",
+        "롤러코스터에서 에너지 전환은?",
+        "진자에서 에너지는 어떻게 바뀌나요?",
+        "마찰이 있으면 어떻게 돼요?",
+    ]
+    for q in quick_qs:
+        if st.button(q, use_container_width=True, key=f"q_{q[:10]}"):
+            st.session_state.messages.append({"role": "user", "content": q})
+            st.rerun()
+
+    st.divider()
+    if st.button("🗑️ 대화 초기화", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown("""
+    <div style='text-align:center; color:#666; font-size:0.75rem; padding-top:10px;'>
+        ⚡ 에너지 전환 물리 교실<br>
+        by claude-sonnet-4-5<br>
+        중학교 물리 교육용
+    </div>
+    """, unsafe_allow_html=True)
+
+# ──────────────────────────────────────────────
+# 메인 화면
+# ──────────────────────────────────────────────
+st.markdown("""
+<div class='main-title'>
+    <h1>⚡ 에너지 전환 물리 교실</h1>
+    <p>🏫 김에너지 선생님과 함께하는 운동에너지 · 위치에너지 탐구</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── 탭 구성 ──
+tab1, tab2, tab3 = st.tabs(["💬 AI 선생님과 대화", "📊 에너지 시뮬레이션", "📚 개념 정리"])
+
+# ════════════════════════════════════════════════
+# TAB 1: 채팅
+# ════════════════════════════════════════════════
+with tab1:
+    if not st.session_state.api_key:
+        st.warning("👈 사이드바에서 Anthropic API 키를 먼저 입력해주세요!", icon="⚠️")
+        st.markdown("""
+        <div class='energy-card'>
+            <h3>🎓 김에너지 선생님 소개</h3>
+            <p>안녕하세요! 저는 중학교 물리를 담당하는 <b>김에너지</b> 선생님입니다.</p>
+            <p>오늘은 <b>운동에너지</b>와 <b>위치에너지</b>가 서로 어떻게 전환되는지 배워보겠습니다! 🌟</p>
+            <br>
+            <div class='formula-box'>
+                KE (운동에너지) = ½ × m × v²<br>
+                PE (위치에너지) = m × g × h<br>
+                역학적에너지    = KE + PE = 일정 (에너지 보존)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # 환영 메시지
+        if not st.session_state.messages:
+            st.markdown("""
+            <div class='energy-card'>
+                <p>🎓 안녕하세요! 저는 <b>김에너지</b> 선생님입니다.<br>
+                운동에너지와 위치에너지의 전환에 대해 무엇이든 물어보세요! ⚡<br>
+                왼쪽 사이드바의 <b>빠른 질문</b>을 눌러도 됩니다.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # 이전 메시지 출력
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st.markdown(f"<div class='chat-message-user'>🧑‍🎓 {msg['content']}</div>",
+                            unsafe_allow_html=True)
+            else:
+                st.markdown(f"<div class='chat-message-assistant'>👩‍🏫 {msg['content']}</div>",
+                            unsafe_allow_html=True)
+
+        # 마지막 메시지가 user면 자동으로 AI 응답 생성
+        if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+            with st.spinner("👩‍🏫 김에너지 선생님이 설명하고 있습니다..."):
+                response_placeholder = st.empty()
+                full_response = ""
+                try:
+                    for chunk in stream_response(
+                        st.session_state.api_key,
+                        st.session_state.messages
+                    ):
+                        full_response += chunk
+                        response_placeholder.markdown(
+                            f"<div class='chat-message-assistant'>👩‍🏫 {full_response}▌</div>",
+                            unsafe_allow_html=True
+                        )
+                    response_placeholder.markdown(
+                        f"<div class='chat-message-assistant'>👩‍🏫 {full_response}</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": full_response}
+                    )
+                except anthropic.AuthenticationError:
+                    st.error("❌ API 키가 올바르지 않습니다. 사이드바에서 다시 확인해주세요.")
+                except Exception as e:
+                    st.error(f"❌ 오류 발생: {str(e)}")
+
+        # 입력창
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.form("chat_form", clear_on_submit=True):
+            cols = st.columns([5, 1])
+            with cols[0]:
+                user_input = st.text_input(
+                    "질문을 입력하세요",
+                    placeholder="예: 높이 10m에서 떨어지는 공의 에너지는?",
+                    label_visibility="collapsed"
+                )
+            with cols[1]:
+                submitted = st.form_submit_button("전송 ✈️", use_container_width=True)
+
+        if submitted and user_input.strip():
+            st.session_state.messages.append({"role": "user", "content": user_input.strip()})
+            st.rerun()
+
+# ════════════════════════════════════════════════
+# TAB 2: 시뮬레이션
+# ════════════════════════════════════════════════
+with tab2:
+    st.markdown("### 📊 에너지 전환 시뮬레이션")
+
+    if run_sim or True:  # 기본값으로 시뮬레이션 표시
+        # ── 자유낙하 ──
+        if st.session_state.sim_type == "자유낙하":
+            if run_sim:
+                h_val = init_height
+            else:
+                h_val = 20.0
+
+            try:
+                sim = simulate_free_fall(mass, h_val, g)
+            except Exception:
+                sim = simulate_free_fall(1.0, 20.0, 9.8)
+
+            # 메트릭
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("초기 위치에너지", f"{sim['initial_PE']:.2f} J",
+                      help="PE = mgh")
+            m2.metric("최대 속도 (바닥)", f"{sim['max_velocity']:.2f} m/s",
+                      help="v = √(2gh)")
+            m3.metric("최대 운동에너지", f"{sim['initial_PE']:.2f} J",
+                      help="에너지 보존: KE_max = PE_initial")
+            m4.metric("낙하 시간", f"{sim['total_time']:.2f} s",
+                      help="t = √(2h/g)")
+
+            st.markdown("""
+            <div class='formula-box'>
+                🔽 자유낙하 에너지 전환<br>
+                시작: PE = mgh,  KE = 0<br>
+                중간: PE ↓ 감소,  KE ↑ 증가<br>
+                바닥: PE = 0,  KE = mgh  (역학적 에너지 보존!)
+            </div>
+            """, unsafe_allow_html=True)
+
+            fig = plot_energy_chart(sim, f"🔽 자유낙하 에너지 전환 (높이={h_val}m, 질량={mass}kg)")
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 세부 데이터 표
+            with st.expander("📋 시뮬레이션 상세 데이터 보기"):
+                step = max(1, len(sim["time"]) // 10)
+                data_rows = []
+                for i in range(0, len(sim["time"]), step):
+                    data_rows.append({
+                        "시간(s)": round(sim["time"][i], 3),
+                        "높이(m)": round(sim["height"][i], 3),
+                        "속도(m/s)": round(sim["velocity"][i], 3),
+                        "운동에너지(J)": round(sim["KE"][i], 3),
+                        "위치에너지(J)": round(sim["PE"][i], 3),
+                        "역학적에너지(J)": round(sim["TE"][i], 3),
+                    })
+                st.dataframe(data_rows, use_container_width=True)
+
+        # ── 진자 운동 ──
+        elif st.session_state.sim_type == "진자 운동":
+            try:
+                p_len = pendulum_len
+                p_ang = swing_angle
+            except Exception:
+                p_len, p_ang = 2.0, 30.0
+
+            sim = simulate_pendulum(mass, p_len, p_ang, g)
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("주기", f"{sim['period']:.3f} s", help="T = 2π√(L/g)")
+            m2.metric("최대 높이", f"{sim['max_height']:.4f} m")
+            m3.metric("최대 속도", f"{sim['max_velocity']:.4f} m/s")
+            m4.metric("초기 위치에너지", f"{sim['initial_PE']:.4f} J")
+
+            st.markdown("""
+            <div class='formula-box'>
+                🌀 진자 에너지 전환<br>
+                최고점: PE 최대, KE = 0  (잠깐 멈춤!)<br>
+                최저점: PE = 0, KE 최대  (가장 빠름!)<br>
+                주기: T = 2π × √(L/g) → 질량과 무관!
+            </div>
+            """, unsafe_allow_html=True)
+
+            fig = plot_energy_chart(sim, f"🌀 진자 운동 에너지 전환 (길이={p_len}m, 각도={p_ang}°)")
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 각도 그래프 추가
+            fig2 = go.Figure()
+            fig2.add_trace(go.Scatter(
+                x=sim["time"], y=sim["angle"],
+                line=dict(color="#a8b8ff", width=2), name="각도(°)"
+            ))
+            fig2.update_layout(
+                title="진자 각도 변화",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(255,255,255,0.03)",
+                font=dict(color="#c0c0c0"),
+                height=250,
+                xaxis_title="시간(s)", yaxis_title="각도(°)"
+            )
+            fig2.update_xaxes(gridcolor="rgba(255,255,255,0.05)")
+            fig2.update_yaxes(gridcolor="rgba(255,255,255,0.05)")
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # ── 롤러코스터 ──
+        else:
+            try:
+                rc_heights = [h1, h2, h3, h4, h5]
+            except Exception:
+                rc_heights = [40.0, 10.0, 30.0, 5.0, 15.0]
+
+            rc_data = simulate_roller_coaster(mass, rc_heights, g)
+            fig = plot_roller_coaster(rc_data, rc_heights)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # 지점별 상세
+            st.markdown("#### 📋 각 지점 에너지 상세")
+            cols = st.columns(len(rc_data))
+            for i, (col, d) in enumerate(zip(cols, rc_data)):
+                with col:
+                    st.markdown(f"""
+                    <div class='energy-card' style='text-align:center;'>
+                        <b>{d['point']}</b><br>
+                        📏 {d['height']}m<br>
+                        🔵 PE: {d['PE']:.1f}J<br>
+                        🔴 KE: {d['KE']:.1f}J<br>
+                        🟡 TE: {d['TE']:.1f}J<br>
+                        ⚡ {d['velocity']:.1f}m/s
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            st.markdown("""
+            <div class='formula-box'>
+                🎢 롤러코스터 에너지 보존<br>
+                높은 곳 → PE 크고 KE 작음 (느림)<br>
+                낮은 곳 → PE 작고 KE 큼  (빠름)<br>
+                어느 지점이든 PE + KE = 일정!
+            </div>
+            """, unsafe_allow_html=True)
+
+# ════════════════════════════════════════════════
+# TAB 3: 개념 정리
+# ════════════════════════════════════════════════
+with tab3:
+    st.markdown("### 📚 핵심 개념 정리")
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        st.markdown("""
+        <div class='energy-card'>
+            <h4>⚡ 운동에너지 (Kinetic Energy)</h4>
+            <p>움직이는 물체가 가지고 있는 에너지</p>
+            <div class='formula-box'>KE = ½ × m × v²</div>
+            <ul>
+                <li>m = 질량 (kg)</li>
+                <li>v = 속도 (m/s)</li>
+                <li>단위: J (줄, Joule)</li>
+            </ul>
+            <p>💡 속도가 2배 → 운동에너지 4배!</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class='energy-card'>
+            <h4>🏔️ 위치에너지 (Potential Energy)</h4>
+            <p>높은 곳에 있는 물체가 가지는 에너지</p>
+            <div class='formula-box'>PE = m × g × h</div>
+            <ul>
+                <li>m = 질량 (kg)</li>
+                <li>g = 중력가속도 (9.8 m/s²)</li>
+                <li>h = 높이 (m)</li>
+                <li>단위: J (줄, Joule)</li>
+            </ul>
+            <p>💡 높이가 2배 → 위치에너지 2배!</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown("""
+        <div class='energy-card'>
+            <h4>🔄 역학적 에너지 보존 법칙</h4>
+            <p>마찰이 없을 때, 운동에너지와 위치에너지의 합은 항상 일정</p>
+            <div class='formula-box'>
+                KE + PE = 일정<br>
+                ½mv² + mgh = 상수
+            </div>
+            <p>🎢 롤러코스터: 높은 곳(PE↑KE↓) ↔ 낮은 곳(PE↓KE↑)</p>
+            <p>🌀 진자: 최고점(PE↑KE=0) ↔ 최저점(PE=0, KE↑)</p>
+            <p>🔽 자유낙하: PE → KE로 전환</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class='energy-card'>
+            <h4>📝 중요 실생활 예시</h4>
+            <table style='width:100%; color:#c0c0c0; font-size:0.9rem;'>
+                <tr><th>상황</th><th>에너지 전환</th></tr>
+                <tr><td>🎿 스키점프</td><td>PE → KE</td></tr>
+                <tr><td>🏀 공 튀기기</td><td>KE → PE → KE</td></tr>
+                <tr><td>🎢 롤러코스터</td><td>PE ↔ KE 반복</td></tr>
+                <tr><td>🌊 파도</td><td>KE ↔ PE 반복</td></tr>
+                <tr><td>🔋 발전소</td><td>PE → KE → 전기에너지</td></tr>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # 대표 계산 예제
+    st.markdown("### 🔢 계산 예제")
+    ex_mass = st.number_input("질량 (kg)", 0.1, 100.0, 2.0, 0.1, key="ex_mass")
+    ex_height = st.number_input("높이 (m)", 0.1, 200.0, 15.0, 0.5, key="ex_h")
+    ex_velocity = st.number_input("속도 (m/s)", 0.0, 100.0, 10.0, 0.5, key="ex_v")
+
+    ec1, ec2, ec3 = st.columns(3)
+    ke_val = calc_kinetic_energy(ex_mass, ex_velocity)
+    pe_val = calc_potential_energy(ex_mass, ex_height)
+    te_val = ke_val + pe_val
+
+    ec1.metric("운동에너지", f"{ke_val:.2f} J",
+               delta=f"½×{ex_mass}×{ex_velocity}²")
+    ec2.metric("위치에너지", f"{pe_val:.2f} J",
+               delta=f"{ex_mass}×9.8×{ex_height}")
+    ec3.metric("역학적에너지(합)", f"{te_val:.2f} J",
+               delta="KE + PE")
+
+    # 에너지 비율 파이차트
+    if te_val > 0:
+        pie_fig = go.Figure(go.Pie(
+            labels=["운동에너지 (KE
